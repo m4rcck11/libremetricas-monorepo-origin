@@ -2,14 +2,14 @@
 
 Documentação geral do projeto LibreMétricas - IBICT.
 
-## 📚 Índice
+### Índice
 
 ### Para Usuários
 - [Guia de Instalação](../backend/README.md)
 - [Configuração](../backend/.env.example)
 - [API Reference](../backend/README.md)
 
-### Para Desenvolvedores
+### Para Pesquisadores
 - [Arquitetura do Sistema](../backend/README.md)
 - [Scripts de Processamento](../backend/tools/README.md)
 - [Deploy](../backend/DEPLOY.md)
@@ -18,12 +18,11 @@ Documentação geral do projeto LibreMétricas - IBICT.
 - [Deployment Guide](../backend/DEPLOY.md)
 - [Manutenção](../backend/tools/README.md)
 
-## 🔗 Links Úteis
+## Links Úteis
 
 - [OpenAlex](https://openalex.org/)
 - [Crossref Event Data](https://www.eventdata.crossref.org/)
 - [IBICT](https://www.ibict.br/)
 
-## 📝 Notas
+##  Notas
 
-Esta seção conterá documentação adicional conforme o projeto evolui.

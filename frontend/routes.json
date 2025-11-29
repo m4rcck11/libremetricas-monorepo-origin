@@ -1,0 +1,17 @@
+{
+  "/sources": "/sources",
+  "/events_sources": "/events_sources",
+  "/events_years": "/events_years",
+  "/events_sources/:ya/:yb": "/events_sources_by_year",
+  "/source_journals/Wikipedia": "/source_journals_wikipedia",
+  "/events_journals": "/events_journals",
+  "/fields_events": "/fields_events",
+  "/fields_source_events/Wikipedia": "/fields_source_events_wikipedia",
+  "/events_source_years/Wikipedia": "/events_source_years_wikipedia",
+  "/events_source_years/Reddit": "/events_source_years_reddit",
+  "/events_source_years/Twitter": "/events_source_years_twitter",
+  "/events_source_years/Notícias": "/events_source_years_noticias",
+  "/events_source_years/Blogs": "/events_source_years_blogs",
+  "/events_source_years/Stack Overflow": "/events_source_years_stackoverflow",
+  "/events_source_years/SciELO": "/events_source_years_scielo"
+}

@@ -1,0 +1,61 @@
+{
+  "events_sources": {
+    "source": ["Wikipedia", "Reddit", "Twitter", "Notícias", "Blogs"],
+    "events": [1520, 1230, 980, 750, 450]
+  },
+  "sources": {
+    "sources": ["Wikipedia", "Reddit", "Twitter", "Notícias", "Blogs", "Stack Overflow", "SciELO"]
+  },
+  "events_years": {
+    "year": [2017, 2018, 2019, 2020, 2021, 2022, 2023],
+    "events": [600, 850, 1100, 1520, 2300, 1950, 2100]
+  },
+  "events_sources_by_year": {
+    "sources": ["Wikipedia", "Reddit", "Twitter"],
+    "events": [800, 650, 400]
+  },
+  "source_journals_wikipedia": {
+    "journal": ["Nature", "Science", "The Lancet", "Cell"],
+    "events": [120, 95, 88, 76]
+  },
+  "events_journals": {
+    "journal": ["Nature", "Science", "The Lancet", "PLOS One", "Cell", "New England Journal of Medicine"],
+    "events": [540, 480, 410, 350, 320, 280]
+  },
+  "fields_events": {
+    "field": ["Biologia", "Ciência da Computação", "Medicina", "Física", "Química"],
+    "events": [2100, 1850, 1500, 1200, 950]
+  },
+  "fields_source_events_wikipedia": {
+    "field": ["Biologia", "Física", "História"],
+    "events": [500, 320, 210]
+  },
+  "events_source_years_wikipedia": {
+    "year": [2018, 2019, 2020, 2021, 2022],
+    "events": [150, 200, 400, 550, 570]
+  },
+  "events_source_years_reddit": {
+    "year": [2019, 2020, 2021, 2022, 2023],
+    "events": [180, 220, 300, 320, 410]
+  },
+  "events_source_years_twitter": {
+    "year": [2019, 2020, 2021, 2022, 2023],
+    "events": [100, 150, 200, 210, 230]
+  },
+  "events_source_years_noticias": {
+    "year": [2017, 2018, 2019, 2020, 2021],
+    "events": [120, 150, 180, 210, 250]
+  },
+  "events_source_years_blogs": {
+    "year": [2017, 2018, 2022, 2023],
+    "events": [80, 110, 130, 160]
+  },
+  "events_source_years_stackoverflow": {
+    "year": [2018, 2019, 2020, 2021, 2023],
+    "events": [50, 70, 90, 110, 130]
+  },
+  "events_source_years_scielo": {
+    "year": [2017, 2019, 2020, 2022],
+    "events": [40, 60, 80, 100]
+  }
+}

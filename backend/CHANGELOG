@@ -55,4 +55,5 @@ Resultados:
 - Erros sao exibidos de forma clara e amigavel
 - Resultados mostram metricas altmetricas agregadas por fonte e ano
 - Interface permite visualizar facilmente quais DOIs foram encontrados e suas estatisticas
+- CSV é exportado em dados brutos com todos os metadados disponíveis. 
 

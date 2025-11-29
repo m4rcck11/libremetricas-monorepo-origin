@@ -1,97 +1,92 @@
-# LibreMétricas - Monorepo IBICT
+# Plataforma Altmetria - Backend API (v0.0.2)
 
-Plataforma de Altmetria para América Latina desenvolvida pelo Instituto Brasileiro de Informação em Ciência e Tecnologia (IBICT).
+API REST de alta performance desenvolvida para fornecer métricas altmétricas de publicações acadêmicas da América Latina. O sistema utiliza uma arquitetura **OLAP (Online Analytical Processing)** baseada em DuckDB e arquivos Parquet, garantindo respostas rápidas com baixo custo computacional.
 
-## 📚 Sobre o Projeto
+## Tecnologias
 
-LibreMétricas é uma plataforma open-source para análise e visualização de métricas alternativas (altmetria) de produção científica da América Latina, integrando dados do OpenAlex LATAM com eventos altmétricos de múltiplas fontes.
+- **Runtime:** Python 3.11 (ou superior).
+- **Framework Web:** FastAPI
+- **Engine Analítica:** DuckDB (Zero-copy sobre Parquet)
+- **Servidor de Aplicação:** Gunicorn + Uvicorn (Production Grade)
+- **Segurança & Performance:** - SlowAPI (para Rate Limiting)
+  - Pydantic 
+  - Cachetools (Cache em memória L1)
 
-## 🏗️ Estrutura do Monorepo
+## 🏗️ Arquitetura
 
-```
-libremetricas-ibict-monorepo/
-├── backend/          # API FastAPI + Scripts de sincronização de dados
-├── frontend/         # Interface web (a adicionar)
-├── docs/            # Documentação geral do projeto
-└── README.md        # Este arquivo
-```
+O projeto segue uma arquitetura segregada para garantir estabilidade em ambiente governamental/institucional:
 
-## 🚀 Quick Start
+1.  **API (Stateless):** Responsável apenas pela leitura e agregação dos dados. Não realiza gravações no banco principal em tempo de execução.
+2.  **Dados (Persistência):** Os dados residem em arquivos `.parquet` e um catálogo DuckDB montados via Volume.
+3.  **Ferramentas (ETL):** Scripts de coleta e processamento (`tools/`), atualmente desacoplados da execução da API.
 
-### Backend
 
-O backend é uma API FastAPI que utiliza DuckDB para consultas analíticas sobre dados Parquet.
+## Executar localmente:
 
-**Documentação completa:**
-- [Backend README](backend/README.md) - Documentação da API
-- [Tools README](backend/tools/README.md) - Scripts de sincronização e processamento
+**Pré-requisitos**:
+- Docker e Docker-Compose
+- Python 3.11+
 
-**Início rápido com Docker:**
-```bash
-cd backend
-docker-compose up
-```
+**Via Docker**
 
-A API estará disponível em `http://localhost:8000`
+Configure as variáveis de ambiente
+> O projeto inclui um .env.example. Você pode copiá-lo e configurá-lo manualmente ou usá-lo para a configuração no Kubernetes. 
 
-### Frontend
+**Prepare os Dados**: Depois da configuração do container, é preciso configurar o container etl ou rodar manualmente os programas de atualização do banco de dados. Os downloads consultam nossos buckets para baixar os arquivos parquets necessários para exibir a análise.
 
-_Em desenvolvimento - a ser adicionado_
+4. Executar:
+> docker compose up --build
 
-## 🛠️ Tecnologias
+A API já está disponível em http://localhost:8000
 
-### Backend
-- **Framework:** FastAPI 0.104.1
-- **Banco de Dados:** DuckDB 0.9.2 (analítico)
-- **Formato de Dados:** Apache Parquet
-- **Servidor:** Gunicorn + Uvicorn
-- **Deploy:** Docker, Alibaba Cloud
 
-### Fontes de Dados
-- **OpenAlex LATAM:** Dados bibliográficos da América Latina
-- **Crossref Event Data:** Eventos altmétricos
-- **BORI:** Menções em mídia (Agência BORI)
+# Deploy em produção (Local/Cloud)
 
-## 📊 Funcionalidades
+A aplicação é container first. 
 
-- ✅ API REST para consulta de dados bibliométricos
-- ✅ Agregação de eventos altmétricos de múltiplas fontes
-- ✅ Export de dados em CSV via streaming
-- ✅ Cache de queries para performance
-- ✅ Rate limiting configurável
-- ✅ Sincronização automática com Google Cloud Storage
+1. Variáveis de ambiente segregadas (.env)
 
-## 🔧 Configuração
+O container precisa das seguintes variáveis de ambiente:
 
-O projeto utiliza variáveis de ambiente para configuração. Veja:
-- [`backend/.env.example`](backend/.env.example) - Todas as variáveis documentadas
+> DATA_DIR -----> Caminho absoluto dentro do container -----> /app/data (default)
+> DUCKDB_PATH -----> Caminho do arquivo de banco ------> /app/data/analytics.duckdb
+> CORS_ORIGINS --> Configurações de domínio (como não sei, tudo está liberado) -> siteoficial.com.bre
+> WORKERS ------> Número de processos em paralelo no gunicorn ---> 4 (default)
 
-## 📖 Documentação
+## Segurança da API 
 
-- [Documentação da API](backend/README.md)
-- [Scripts de Processamento](backend/tools/README.md)
-- [Deploy](backend/DEPLOY.md)
-- [Changelog](backend/CHANGELOG)
+#### Rate Limiting (configurável na env)
+#### Read-Only Database: Conexão com o DuckDB é aberta estritamente em modo leitura (read_only=True), previne corrupção de dados por concorrência.
+#### Privilégios: o container roda como usuário (sem root).
 
-## 🤝 Contribuindo
+## Manutenção e Atualização dos dados
 
-Este é um projeto do IBICT. Para contribuir:
+A pasta tools/ contém scripts para coleta de novas métricas oriundas do CrossRef e BORI 
 
-1. Fork o repositório
-2. Crie uma branch para sua feature (`git checkout -b feature/MinhaFeature`)
-3. Commit suas mudanças (`git commit -m 'feat: adiciona MinhaFeature'`)
-4. Push para a branch (`git push origin feature/MinhaFeature`)
-5. Abra um Pull Request
+-> Arquivos CrossRef disponíveis em: (Arquivos pesados, servidor lento)
+-> Arquivos Bori disponíveis em: "" ---> No alibaba Cloud (Bucket Público) (Arquivos leves)
+-> Arquivos OpenAlex disponíveis em: "" --> No Google Cloud (Bucket Público) (Dados gigantes, servidor "rápido")
 
-## 📝 Licença
+### Os scripts tem tratamento de erro, retry e os dados são salvos incrementalmente para contornar eventuais falhas de rede.
 
-[A definir]
 
-## 🏛️ Créditos
+**Nota**: Estes scripts devem ser executados em um processo separado (Worker ou CronJob) e não no container da API, para evitar degradação de performance. 
 
-Desenvolvido pelo **Instituto Brasileiro de Informação em Ciência e Tecnologia (IBICT)**
 
----
 
-**Versão:** 0.1
-**Status:** Em desenvolvimento ativo
+## Inserção dos Dados para Análise via DuckDB (em casos de atualização)
+
+Com o DuckDB temos um banco de dados de 12KB. Com o DuckDB, separamos a lógica do banco de dados, que já está dividido em parquets. O arquivo >analyitics.duckdb é apenas o código.
+
+## Frontend
+´´bash
+
+cd frontend 
+npm run build 
+
+´´
+
+**Configure a rota da API**: A rota da api (Frontend > src > api > AxiosConfig.js services está temporariamente em um domínio MARKDEV. Para utilizar localmente, insira o endereço local (localhost:8000) ou o CNAME de hospedagem da API.
+
+
+### O frontend então estará disponível em :5173.

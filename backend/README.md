@@ -1,229 +1,243 @@
-# Plataforma Altmetria - Backend API (v0.0.2)
+# Backend - API e ETL
 
-API REST de alta performance desenvolvida para fornecer métricas altmétricas de publicações acadêmicas da América Latina. O sistema utiliza uma arquitetura **OLAP (Online Analytical Processing)** baseada em DuckDB e arquivos Parquet, garantindo respostas rápidas com baixo custo computacional.
+API REST de alta performance para métricas altmétricas de publicações acadêmicas da América Latina. Arquitetura OLAP baseada em DuckDB e Parquet.
 
 ## Tecnologias
 
-- **Runtime:** Python 3.11 (ou superior).
+- **Runtime:** Python 3.11+
 - **Framework Web:** FastAPI
 - **Engine Analítica:** DuckDB (Zero-copy sobre Parquet)
-- **Servidor de Aplicação:** Gunicorn + Uvicorn (Production Grade)
-- **Segurança & Performance:** - SlowAPI (para Rate Limiting)
-  - Pydantic 
-  - Cachetools (Cache em memória L1)
+- **Servidor:** Gunicorn + Uvicorn
+- **Performance:** SlowAPI (Rate Limiting), Cachetools (Cache L1)
 
-## 🏗️ Arquitetura
+## Arquitetura
 
-O sistema faz um mapeamento dinâmico dos arquivos na inicialização. Se o volume de arquivos crescer muito (10k+), podemos otimizar, mas para o volume atual é instantâneo. Cold Start de até 5 segundos, queries em milissegundos. 
+O sistema segue uma arquitetura segregada:
 
-O projeto segue uma arquitetura segregada para garantir estabilidade em ambiente governamental/institucional:
+1. **API (Stateless):** Leitura e agregação de dados. Sem gravações em tempo de execução.
+2. **Dados (Persistência):** Arquivos `.parquet` montados via volume Docker.
+3. **ETL (Tools):** Scripts de coleta e processamento desacoplados da API.
 
-1.  **API (Stateless):** Responsável apenas pela leitura e agregação dos dados. Não realiza gravações no banco principal em tempo de execução.
-2.  **Dados (Persistência):** Os dados residem em arquivos `.parquet` e um catálogo DuckDB montados via Volume.
-3.  **Ferramentas (ETL):** Scripts de coleta e processamento (`tools/`), atualmente desacoplados da execução da API.
+## Estrutura
 
+```
+backend/
+├── app/              # Código da API FastAPI
+│   ├── main.py       # Endpoints da API
+│   ├── database.py   # Conexão DuckDB
+│   └── queries.py    # Queries analíticas
+├── tools/            # Scripts de ETL
+│   ├── run_data_sync.py          # Sincroniza dados do GCS
+│   ├── collect_data_gcp.py       # Menu interativo
+│   ├── process_all_events.py     # Consolida eventos
+│   ├── process_crossref_events.py
+│   ├── process_bori_events.py
+│   └── collect_crossref_events.py
+├── data/             # Dados Parquet (volume Docker)
+└── docker-compose.yml
+```
 
-## Executar localmente:
+## Iniciar o Backend
 
-**Pré-requisitos**:
-- Docker e Docker-Compose
-- Python 3.11^
+### Via Docker Compose
 
-**Via Docker**
+```bash
+cd backend
 
-Configure as variáveis de ambiente
-> O projeto inclui um .env.example. Você pode copiá-lo e configurá-lo manualmente ou usá-lo para a configuração no Kubernetes. 
+# Subir a API
+docker compose up --build
 
-**Prepare os Dados**: Coloque os arquivos .parquet e o banco analytics.duckdb  na pasta ./data local. 
+# Em outro terminal, popular dados iniciais
+docker exec -it altmetria_api_duckdb python tools/run_data_sync.py
+```
 
-4. Executar:
-> docker compose up --build
+A API estará em `http://localhost:8000`
 
-Pronto! A API já está disponível em http://localhost:8000
+### Desenvolvimento Local (sem Docker)
 
+```bash
+cd backend
 
-# Deploy em produção (Local/Cloud)
+# Instalar dependências
+pip install -r requirements.txt
 
-A aplicação é container first. 
+# Executar API
+uvicorn app.main:app --reload --port 8000
+```
 
-1. Variáveis de ambiente segregadas (.env)
+## Scripts de ETL
 
-O container precisa das seguintes variáveis de ambiente:
+### Sincronizar Dados do GCS (OpenAlex LATAM)
 
-> DATA_DIR -----> Caminho absoluto dentro do container -----> /app/data (default)
-> DUCKDB_PATH -----> Caminho do arquivo de banco ------> /app/data/analytics.duckdb
-> CORS_ORIGINS --> Configurações de domínio (como não sei, tudo está liberado) -> siteoficial.com.bre
-> WORKERS ------> Número de processos em paralelo no gunicorn ---> 4 (default)
+```bash
+# Modo automatizado (produção)
+docker exec -it altmetria_api_duckdb python tools/run_data_sync.py
 
-## Persistência dos dados
+# Modo interativo (desenvolvimento)
+docker exec -it altmetria_api_duckdb python tools/collect_data_gcp.py
+```
 
-A pasta /app/data dentro do container precisa ser um volume montado com arquivos .parquet. A api não popula esses dados sozinha. A atualização precisa ser feita em jobs agendados que escrevem no mesmo volume.
+O sistema implementa sincronização incremental: apenas arquivos novos são baixados.
 
-**Para isso, temos scripts de apoio**
+### Processar Eventos Altmétricos
 
-Em scripts/ incluí utilitários de referência para ambientes Linux/Debian, testados na minha máquina. Os shelss devem rodar em qualquer serviço em servidores até bare-metal.
+```bash
+# Processar eventos Crossref
+docker exec -it altmetria_api_duckdb python tools/process_crossref_events.py
 
-- setup-firewall.sh -> configuração de firewall básica (rever com infra do IBICT)
-- setup-ssl.sh (automação de certbot para certificado ssl)
-- deploy.sh (exemplo de esteira local)
+# Processar eventos BORI
+docker exec -it altmetria_api_duckdb python tools/process_bori_events.py
 
-## Endpoints principais
+# Consolidar todas as fontes
+docker exec -it altmetria_api_duckdb python tools/process_all_events.py
+```
 
-Os endpoints principais estão na documentação swagger em /docs. Seguimos o contrato estabelecido pelo frontend. 
+### Coletar Novos Eventos
+
+```bash
+# Coletar eventos via API Crossref
+docker exec -it altmetria_api_duckdb python tools/collect_crossref_events.py
+```
+
+## Endpoints Principais
+
+Documentação completa em `/docs` (Swagger)
 
 ### Sistema
-- GET /health - Status da API e conexão com o 'Banco de Dados'
+- `GET /health` - Status da API e conexão com DuckDB
+
 ### Métricas e Agregações
-- GET /events_sources - Eventos por fonte
-- GET /events_years - Distribuição por anos
-- GET /fields_events - Eventos por área de conhecimen to (OpenAlex)
+- `GET /events_sources` - Eventos por fonte
+- `GET /events_years` - Distribuição por anos
+- `GET /fields_events` - Eventos por área de conhecimento
 
 ### Busca
-- POST /search_dois - Recuperação de Métricas. Terminamos a implementação no frontend.
+- `POST /search_dois` - Recuperação de métricas por DOI
 
 ### Exportação
+- `GET /all_events_data_filter_years_enriched/{ya}/{yb}` - Exportar CSV com dados enriquecidos
 
-- **PRECISA DE CORREÇÃO** - Extração de dados brutos com rate limiting restritivo. A intenção é modificar para extrair dados brutos, e não apenas os disponíveis no frontend. 
+## Deploy em Produção
 
+### Variáveis de Ambiente
 
+```bash
+# Docker Compose
+DEBUG=False
+RATE_LIMIT_ENABLED=true
+RATE_LIMIT_PER_MINUTE=100
+CACHE_ENABLED=true
+CACHE_TTL_SECONDS=300
 
-## Segurança da API 
+# GCS
+GCS_BUCKET_NAME=altmetria_latam_ibict_tables
+LOCAL_DOWNLOAD_PATH=/app/data
 
-#### Rate Limiting (configurável na env)
-#### Read-Only Database: Conexão com o DuckDB é aberta estritamente em modo leitura (read_only=True), previne corrupção de dados por concorrência.
-#### Privilégios: o container roda como usuário (sem root).
+# Performance
+CHUNK_SIZE=50000
+MAX_RETRIES=3
+REQUEST_TIMEOUT=300
+```
 
-## Manutenção e Atualização dos dados
+### Deploy via Docker
 
-A pasta tools/ contém scripts para coleta de novas métricas oriundas do CrossRef, Bluesky e BORI 
+```bash
+cd backend
 
--> Arquivos CrossRef disponíveis em: (Arquivos pesados, servidor lento)
--> Arquivos Bluesky e Bori disponíveis em: "" ---> No alibaba Cloud (Bucket Público) (Arquivos leves)
--> Arquivos OpenAlex disponíveis em: "" --> No Google Cloud (Bucket Público) (Dados gigantes, servidor "rápido")
+# Build e iniciar
+docker compose up -d
 
-### Os scripts tem tratamento de erro, retry e os dados são salvos incrementalmente para contornar eventuais falhas de rede.
+# Download inicial de dados
+docker exec altmetria_api_duckdb python tools/run_data_sync.py
 
+# Verificar saúde
+curl http://localhost:8000/health
+```
 
-**Nota**: Estes scripts devem ser executados em um processo separado (Worker ou CronJob) e não no container da API, para evitar degradação de performance. 
+### Agendar Sincronização Automática
 
+Adicione ao crontab:
 
+```bash
+# Executar diariamente às 2h
+0 2 * * * docker exec altmetria_api_duckdb python tools/run_data_sync.py
+```
 
-## Inserção dos Dados para Análise via DuckDB (em casos de atualização)
+### Monitoramento
 
-Com o DuckDB temos um banco de dados de 12KB. Com o DuckDB, separamos a lógica do banco de dados, que já está dividido em parquets. O arquivo >analyitics.duckdb é apenas o código.
+```bash
+# Logs da API
+docker logs -f altmetria_api_duckdb
 
+# Verificar dados
+docker exec altmetria_api_duckdb ls -lh /app/data
 
-### O que é OLAP no nosso caso?
+# Health check
+curl http://localhost:8000/health
+```
 
-OLAP é o porcessamento analítico online, diferente de OLTP (transacional).
+## Arquitetura de Dados (OLAP)
 
-Com o duckDB (engine vetorizada): com o python puro podemos ler uma linha, processar, ler outra e assim sucetivamente. Agora, com o DuckDB, o processo é: ele lê todos os ítens de uma coluna e processa em vetores com instruções da CPU, isso faz com que ele entregue os arquivos mais digeridos em poucos milissegundos. 
+### Por que DuckDB?
 
-### Qual é a arquitetura de dados?
+OLAP (Online Analytical Processing) é processamento analítico, diferente de OLTP (transacional).
 
-Com DuckDB, a arquitetura de dados é uma Lakehouse moderna. O banco de dados é apenas um motor de processamento (DuckDB) que apenas lê os dados.
+**Vantagens:**
+1. **Zero-Copy:** Lê diretamente dos Parquets sem copiar dados
+2. **Stateless:** Arquivo `.duckdb` tem apenas metadados (12KB)
+3. **Vetorizado:** Lê colunas inteiras em vetores (CPU SIMD)
+4. **Performance:** Queries em milissegundos sobre GBs de dados
 
-1. Arquitetura Zero-Cópia: O banco não copia os dados para dentro dele. Tudo é lido diretamente dos parquets. 
-2. Computação sem estado (Stateless): Como o  arquivo de banco (.duckdb) guarda só os metadados, ele é leve (12KB) e descartável. Se o servidor parar de funcionar, os dados são mantidos porque tudo está dentro dos arquivos parquet, esses, imutáveis e baixados de fontes externas.
-3. Performance OLAP: O DuckDB surgiu nas trends mais modernas entre desenvolvedores por usar execução vetorizada e sua inclinação de uso para leitura de dados de IA. O DuckDB consulta parquets em milissegundos e nos isenta de estruturar SQL transacional, o que seria um exagero para apenas visualizar dados. Ex: ele lê apenas a coluna 'Ano' do arquivo parquet e ignora o resto.
+### Exemplo de Performance
 
-### Exemplo de funcionamento
+Query tradicional (linha por linha):
+```
+ID, Titulo, Ano, Autor
+1, "Artigo A", 2023, "Dr. Silva"  <- lê linha inteira
+2, "Artigo B", 2022, "Dra. Santos"
+```
 
-O duckdb usa índices implícitos para fazer o alinhamento posicional. Veja essa consulta:
+DuckDB (colunar):
+```
+Coluna Ano: [2023, 2022, 2024, ...]
+Coluna Titulo: ["Artigo A", "Artigo B", ...]
+```
 
-> ID, Titulo, Ano, Autor
-> 1, "A Cura do Câncer", 2023, "Dr. Silva"  <-- O computador lê a linha inteira
-> 2, "Estudo de IA", 2022, "Dra. Santos"
+Para `SELECT Titulo WHERE Ano = 2023`:
+1. Escaneia apenas coluna `Ano` → encontra índices [0, 5, 12]
+2. Busca apenas essas posições em `Titulo`
+3. Retorna resultado em milissegundos
 
-Se você quer saber, por ex, quantos artigos são de 2023, o computador lê a linha inteira do artigo em questão (neste exemplo, o artigo A) joga fora o que não precisa e guarda o ano. 
+## Estrutura de Dados
 
-> No duckDB isso não acontece
+Arquivos Parquet organizados em:
 
-O duckDB desmonta a tabela e guarda cada coluna em um lugar separado do arquivo. Por ex:
-
-> Coluna ID [1, 2, 3, 4 ...]
-> Coluna Título: ["DOI-Numero-Etc-2023" - "Pesquisa Sobre: ...", ...]
-> Coluna Ano: [2023, 2024, 2025]
-> Coluna Fonte: ["Bluesky", "wikipedia", ...]
-
-E para conectar as pontas ele usa o Index. O DuckDB sabe que o primeiro item da coluna ano corresponde ao primeiro item da coluna Título. 
-
-> Pseudocódigo com a query SELECT Titulo FROM artigos WHERE Ano = 2023
-
-1. O DuckDB escaneia o arquivo da coluna ano. Ele carrega o vetor de números ( [ 2000, ... 2023, 2024, 2025]) e aplica um filtro sobre onde há, neste exemplo, 2023. A resposta do filtro é **0 e 2**. 
-
-2. Agora o DuckDB sabe que precisa das posições 0 e 2. Ele vai apenas no arquivo da coluna título. Pula as posições 1 e 3, lê o que interessa e dá a resposta.
-
-Note: Para filtrar por ano, com os nossos arquivos em gigabytes, o POSTGRES gastaria muito em texto desnecessário para chegar na coluna ano. 
-
-
-## Estrututra de Dados e comunicação entre arquivos
-
-### database.py: Arquitetura dos dados
-
-O dabase.py é um virtual data lake. Ele caminha pela pasta data/, acha os arquivos .parquet e diz pro DuckDB quais precisamos tratar como tabela SQL sem carregar na memória. 
-
-Nas linhas 67 até a 85 usamos glob. Se mais arquivos parquet forem adicionados (como Alysson sugeriu de mais fontes), pode demorar levar ainda mais tempo para a inicializar a API. 
-
-### queries.py 
-
-Aqui temos todas as queries já estruturadas pelo Dr. Alysson. Adicionamos "três categorias de peso" para explicar sobre a velocidade das consultas. 
-
-### Categoria A: Dashboard Incial
-
-Queries leem apenas o arquivo de eventos
-- Funções: all_sources, all_events_years, all_sources_filter_years.
-- Performance: < 50ms entre todas.
-
-Essas métricas de visão geral lêem direto do disco semp precisar de pré processamento. 
-
-### Categoria B: Os Joins Pesados (previamente estrturados)
-
-As queries elaboradas pelo Alysson no BigQuery entram aqui. São queries complexaas com os metadados gigantescos do OpenAlex. 
-
-- Funções: event_journals, fields_events.
-- A lógica do Join: 
-> ON LOWER(SUBSTRING(a.id FROM 17)) = LOWER(b.doi)
-
-**O problema é** que o evento vem como "https://doi.org/10.1234/x", o OpenAlex só 10.12345. 
-**A solução que usamos** O DuckDB corta os primeiros 16 caracteres da URL em tempo de execução para bater com o DOI.
-**Trade-Off**: Gasta bem mais CPU, mas é um valor irrisório se comparado a velocidade em que é executado.
-
-**Filtro de Qualidade**
-
-> WHERE c.score >= 0.95
-
-Não mostramos qualquer classificação. Sóáreas do conhecimento onde o algoritmo tem 95% ou mais de confiança.
-
-### Categoria C: Exportação (WIP)
-
-24/11/2025:
-
-Modificamos o endpoint GET /all_events_data_filter_years_enriched/{ya}{yb} para retornar arquivo CSV direto para download. Anteriormente, o endpoint retornava JSON em formato colunar que precisava ser processado no cliente. Para concretizar a atualização, alteramos as chamadas no arquivo que centraliza as queries: adicionamos a função generate_csv_streaming() em queries.py (428-469). 
-
-Também adicionamos na main.py o import do StreamingResponse, o Endpoint agora retorna StreamingResponse com media_type="text/csv" + header Content-Disposition, que faz o download automático. **Para isso, alteramos o uso do botão no frontend de JSON MAP para href simples.
-
-Com isso, a exportação traz as colunas DOI, Timestamp, Year, Source, Prefix, Title, Publication year, Journal, Field.
-
-Resumo:
-  Tabelas consultadas: 7 (eventos + works + locations + sources + topics + fields)
-  Dados escaneados: ~1.75 GB por request (Parquet)
-  Tempo de processamento: 800ms - 1.5s (dependendo do range de anos)
-  Rate limit: 10 requests/min (protege servidor)
-  Uso de CPU: ~20% do tempo (com rate limit ativo)
-
-  Trade-off: Query pesada no servidor, mas browser não trava e funciona em qualquer dispositivo.
-
-- Função: all_events_data_filter_years_enriched
-
-Essa é a função que estamos trabalhando. Por ser um pouco mais crítica, ainda é preciso cautela na implementação. Ela faz 6 Left Joins que varrem todas as tabelas. A exportação é completa e a operação mais custosa do sistema porque enriquecemos cada evento com todos os metadados disponíveis. Por esse mesmo motivo, colocamos um rate limit mais restritivo, mas os dados ainda estão indisponíveis para finalizarmos a implementação com data streaming para criação do csv -> data streaming é essencial porque, por conta do volume dos dados, esse processo se realizado no cliente pode quebrar o navegador. 
-
-Categoria D: Busca por doi: search_dois
-
-- Função search_dois (n12)
-
-Ao invés de fazer um SQL maluco que retorna um JSON aninhado, optei por buscar os dados brutos no banco e montar o dicionário/JSON no python de maneira segura.
-
-> placeholders = ', '.join(['?' for _ in normalized_dois])
-
-**Garanti que todos os parâmetros usassem "?" para impedir qualquer tipo de SQL Injection via API**.
+- `/data/*.parquet` - Tabelas OpenAlex LATAM (autores, obras, instituições)
+- `/data/events/raw/` - Eventos brutos (Crossref, BORI, Bluesky)
+- `/data/events/processed/` - Eventos processados
+- `/data/events/consolidated/` - Eventos consolidados
+
+## Segurança
+
+- **Rate Limiting:** Configurável por endpoint
+- **Read-Only Database:** DuckDB aberto em modo leitura
+- **Container:** Executa sem privilégios root
+- **SQL Injection:** Queries parametrizadas com placeholders
+
+## Performance das Queries
+
+### Categoria A: Dashboard Inicial
+- Funções: `all_sources`, `all_events_years`
+- Performance: < 50ms
+- Leitura: Apenas arquivo de eventos
+
+### Categoria B: Joins Complexos
+- Funções: `event_journals`, `fields_events`
+- Performance: 200-500ms
+- Leitura: Eventos + metadados OpenAlex (7 tabelas)
+
+### Categoria C: Exportação CSV
+- Função: `all_events_data_filter_years_enriched`
+- Performance: 800ms - 1.5s
+- Dados escaneados: ~1.75 GB
+- Rate limit: 10 requests/min
