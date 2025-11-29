@@ -1,0 +1,25 @@
+# Dockerfile for ETL tools only
+FROM python:3.11-slim
+
+WORKDIR /app
+
+# Install dependencies
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy tools and configuration
+COPY tools/ ./tools/
+
+# Set Python path
+ENV PYTHONPATH=/app:/app/tools
+
+# Run as non-root
+RUN useradd -m -u 1000 appuser && \
+    chown -R appuser:appuser /app && \
+    mkdir -p /app/data && \
+    chown -R appuser:appuser /app/data
+
+USER appuser
+
+# Default command (can be overridden)
+CMD ["python", "/app/tools/collect_data_gcp.py"]

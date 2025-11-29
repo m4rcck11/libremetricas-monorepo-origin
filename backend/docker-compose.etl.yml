@@ -1,0 +1,19 @@
+version: '3.8'
+
+# ETL Tools - Run data collection and processing jobs separately from the API
+# Usage: docker compose -f docker-compose.etl.yml run --rm etl
+
+services:
+  etl:
+    build:
+      context: .
+      dockerfile: Dockerfile.etl
+    container_name: altmetria_etl
+    volumes:
+      - ./data:/app/data
+      - ./tools:/app/tools
+    env_file:
+      - .env
+    command: python /app/tools/collect_data_gcp.py
+    # Override command when running:
+    # docker compose -f docker-compose.etl.yml run --rm etl python /app/tools/run_data_sync.py

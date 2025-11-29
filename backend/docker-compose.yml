@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  api:
+    build: .
+    container_name: altmetria_api_duckdb
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+      - ./app:/app/app
+      - ./tools:/app/tools
+    environment:
+      - DEBUG=False
+      - RATE_LIMIT_ENABLED=true
+      - RATE_LIMIT_PER_MINUTE=100
+      - RATE_LIMIT_PER_MINUTE_HEAVY=10
+      - CACHE_ENABLED=true
+      - CACHE_TTL_SECONDS=300
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request, json; r = urllib.request.urlopen('http://localhost:8000/health'); exit(0 if json.loads(r.read())['database_connected'] else 1)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
