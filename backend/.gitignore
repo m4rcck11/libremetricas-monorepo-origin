@@ -55,10 +55,12 @@ logs/
 *.sqlite3
 
 # Data files (large parquet files)
-data/*.parquet
-data/*.duckdb
-data/*.db
+data/
 !data/.gitkeep
+
+# Bluesky scripts (outro projeto - bucket sera fornecido futuramente)
+tools/collect_bluesky_events.py
+tools/process_bluesky_events.py
 
 # Docker
 .dockerignore

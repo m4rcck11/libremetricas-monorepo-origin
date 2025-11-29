@@ -1,160 +1,248 @@
-# Backend - ETL e API
+# ETL Tools - Processamento de Dados
 
-Scripts de ETL (Extract, Transform, Load) para coleta e processamento de dados altmétricos, e API REST para consultas analíticas.
+Scripts para coleta e processamento de dados altmetricos.
 
-## Arquitetura
-
-- **API REST**: FastAPI + DuckDB (leitura analítica sobre Parquet)
-- **ETL**: Scripts Python para coleta e transformação de dados
-- **Dados**: Arquivos Parquet armazenados em `/data`
-
-## Estrutura de Diretórios
+## Estrutura de Arquivos
 
 ```
-backend/
-├── app/              # Código da API FastAPI
-├── tools/            # Scripts de ETL
-│   ├── run_data_sync.py          # Sincroniza dados do GCS (automatizado)
-│   ├── collect_data_gcp.py       # Menu interativo para coleta
-│   ├── process_all_events.py     # Consolida eventos
-│   ├── process_crossref_events.py
-│   ├── process_bori_events.py
-│   ├── collect_crossref_events.py
-│   └── config.py                 # Configurações centralizadas
-├── data/             # Dados Parquet (volume Docker)
-└── docker-compose.yml
+tools/
+├── run_data_sync.py              # Sync automatizado OpenAlex LATAM
+├── collect_data_gcp.py           # Menu interativo para operacoes manuais
+├── collect_crossref_events.py    # Coletor de eventos Crossref
+├── process_crossref_events.py    # Processador de eventos Crossref
+├── process_bori_events.py        # Processador de eventos BORI
+├── process_all_events.py         # Consolidador de todas as fontes
+└── config.py                     # Configuracoes centralizadas
 ```
 
-## Iniciar o Backend
+## Localizacao dos Dados
 
-### Via Docker Compose
+```
+data/
+├── *.parquet                           # OpenAlex LATAM (works, authors, institutions, etc)
+├── analytics.duckdb                    # Catalogo de metadados DuckDB
+├── events/
+│   ├── raw/
+│   │   ├── crossref/                   # Eventos brutos Crossref
+│   │   └── BORI/                       # Eventos brutos BORI
+│   ├── processed/
+│   │   ├── crossref_clean_events.parquet
+│   │   └── bori_clean_events.parquet
+│   └── consolidated/
+│       └── all_events.parquet          # Arquivo final consolidado
+└── crossref_clean_events.parquet       # Symlink para consolidated/all_events.parquet
+```
 
+## Passo a Passo - Setup Inicial
+
+### Opcao 1: Com Docker (Recomendado)
+
+1. Baixar dados OpenAlex LATAM:
 ```bash
-cd backend
-
-# Subir a API
-docker compose up --build
-
-# Em outro terminal, popular dados iniciais
-docker exec -it altmetria_api_duckdb python tools/run_data_sync.py
+docker compose -f docker-compose.etl.yml run --rm etl python /app/tools/run_data_sync.py
 ```
 
-A API estará disponível em `http://localhost:8000`
-
-### Desenvolvimento Local (sem Docker)
-
+2. Verificar download:
 ```bash
-cd backend
+docker compose -f docker-compose.etl.yml run --rm etl ls -lh /app/data
+```
 
-# Instalar dependências
+3. Coletar eventos Crossref:
+```bash
+docker compose -f docker-compose.etl.yml run --rm etl python /app/tools/collect_crossref_events.py
+```
+
+4. Processar eventos Crossref:
+```bash
+docker compose -f docker-compose.etl.yml run --rm etl python /app/tools/process_crossref_events.py
+```
+
+5. Consolidar eventos (CRITICO - sempre executar por ultimo):
+```bash
+docker compose -f docker-compose.etl.yml run --rm etl python /app/tools/process_all_events.py
+```
+
+### Opcao 2: Sem Docker
+
+1. Instalar dependencias:
+```bash
 pip install -r requirements.txt
-
-# Executar API
-uvicorn app.main:app --reload --port 8000
 ```
 
-## Scripts de ETL
+2. Configurar variaveis de ambiente (criar .env ou exportar):
+```bash
+export GCS_BUCKET_NAME=altmetria_latam_ibict_tables
+export LOCAL_DOWNLOAD_PATH=./data
+export CROSSREF_MAILTO=seu@email.com
+```
 
-### Sincronizar Dados do GCS (OpenAlex LATAM)
+3. Executar scripts:
+```bash
+python tools/run_data_sync.py
+python tools/collect_crossref_events.py
+python tools/process_crossref_events.py
+python tools/process_all_events.py
+```
+
+## Pipeline de Processamento
+
+### 1. Dados OpenAlex LATAM
+
+Script: run_data_sync.py
+Fonte: GCS bucket (Google Cloud Storage)
+Destino: /data/*.parquet
+Frequencia: Diario
+
+O que faz:
+- Sincronizacao incremental (so baixa arquivos novos)
+- Valida integridade dos dados
+- API le automaticamente os .parquet via DuckDB
+
+### 2. Eventos Crossref
+
+Coleta:
+```bash
+python tools/collect_crossref_events.py
+```
+Entrada: API Crossref Event Data
+Saida: /data/events/raw/crossref/p*_*.parquet
+
+Processamento:
+```bash
+python tools/process_crossref_events.py
+```
+Entrada: /data/events/raw/crossref/
+Saida: /data/events/processed/crossref_clean_events.parquet
+
+### 3. Eventos BORI
+
+Upload manual:
+- Colocar arquivos .parquet em /data/events/raw/BORI/
+
+Processamento:
+```bash
+python tools/process_bori_events.py
+```
+Entrada: /data/events/raw/BORI/*.parquet
+Saida: /data/events/processed/bori_clean_events.parquet
+
+### 4. Consolidacao (SEMPRE EXECUTAR POR ULTIMO)
 
 ```bash
-# Modo automatizado (produção)
-docker exec -it altmetria_api_duckdb python tools/run_data_sync.py
-
-# Modo interativo (desenvolvimento)
-docker exec -it altmetria_api_duckdb python tools/collect_data_gcp.py
+python tools/process_all_events.py
 ```
 
-O sistema implementa sincronização incremental: apenas arquivos novos são baixados. Arquivos existentes são preservados.
+O que faz:
+- Carrega eventos de todas as fontes processadas
+- Combina tudo (UNION ALL)
+- Remove duplicatas
+- Cria /data/events/consolidated/all_events.parquet
+- Cria symlink crossref_clean_events.parquet apontando para o consolidado
 
-### Processar Eventos Altmétricos
+IMPORTANTE: A API le o arquivo via symlink. Sempre execute este script apos atualizar qualquer fonte.
+
+## Menu Interativo (Desenvolvimento)
+
+Para operacoes manuais, use o menu interativo:
 
 ```bash
-# Processar eventos Crossref
-docker exec -it altmetria_api_duckdb python tools/process_crossref_events.py
-
-# Processar eventos BORI
-docker exec -it altmetria_api_duckdb python tools/process_bori_events.py
-
-# Consolidar todas as fontes
-docker exec -it altmetria_api_duckdb python tools/process_all_events.py
+docker compose -f docker-compose.etl.yml run --rm etl python /app/tools/collect_data_gcp.py
 ```
 
-### Coletar Novos Eventos
+Ou sem Docker:
+```bash
+python tools/collect_data_gcp.py
+```
+
+Opcoes do menu:
+- 1: Baixar dados OpenAlex
+- 2: Listar arquivos baixados
+- 3: Concatenar dados
+- 10: Coletar eventos Crossref
+- 11: Processar eventos Crossref
+- 13: Processar eventos BORI
+- 14: Consolidar todos os eventos
+
+## Automacao para Producao
+
+Criar cronjob ou task scheduler:
 
 ```bash
-# Coletar eventos via API Crossref
-docker exec -it altmetria_api_duckdb python tools/collect_crossref_events.py
+# Sync diario OpenAlex as 2h
+0 2 * * * cd /path/to/backend && docker compose -f docker-compose.etl.yml run --rm etl python /app/tools/run_data_sync.py >> /var/log/etl_sync.log 2>&1
+
+# Coletar eventos Crossref as 3h
+0 3 * * * cd /path/to/backend && docker compose -f docker-compose.etl.yml run --rm etl python /app/tools/collect_crossref_events.py >> /var/log/etl_crossref.log 2>&1
+
+# Processar Crossref as 4h
+0 4 * * * cd /path/to/backend && docker compose -f docker-compose.etl.yml run --rm etl python /app/tools/process_crossref_events.py >> /var/log/etl_process.log 2>&1
+
+# Consolidar as 5h
+0 5 * * * cd /path/to/backend && docker compose -f docker-compose.etl.yml run --rm etl python /app/tools/process_all_events.py >> /var/log/etl_consolidate.log 2>&1
 ```
 
-## Configuração
-
-### Variáveis de Ambiente
-
-Principais variáveis configuráveis no `.env` ou no `docker-compose.yml`:
+Ou criar script unico:
 
 ```bash
-# Google Cloud Storage
-GCS_BUCKET_NAME=altmetria_latam_ibict_tables
-LOCAL_DOWNLOAD_PATH=/app/data
+#!/bin/bash
+# daily_etl.sh
+set -e
 
-# API
-DEBUG=False
-RATE_LIMIT_ENABLED=true
-RATE_LIMIT_PER_MINUTE=100
-CACHE_ENABLED=true
-CACHE_TTL_SECONDS=300
+docker compose -f docker-compose.etl.yml run --rm etl python /app/tools/run_data_sync.py
+docker compose -f docker-compose.etl.yml run --rm etl python /app/tools/collect_crossref_events.py
+docker compose -f docker-compose.etl.yml run --rm etl python /app/tools/process_crossref_events.py
+docker compose -f docker-compose.etl.yml run --rm etl python /app/tools/process_all_events.py
 
-# Performance
-CHUNK_SIZE=50000
-MAX_RETRIES=3
-REQUEST_TIMEOUT=300
+echo "ETL pipeline concluido: $(date)"
 ```
 
-## Deploy em Produção
-
-### Via Docker Compose
-
+Agendar:
 ```bash
-cd backend
-
-# Subir serviço
-docker compose up -d
-
-# Download inicial de dados
-docker exec altmetria_api_duckdb python tools/run_data_sync.py
-
-# Verificar saúde da API
-curl http://localhost:8000/health
+0 2 * * * /path/to/backend/scripts/daily_etl.sh >> /var/log/daily_etl.log 2>&1
 ```
 
-### Agendar Sincronização Automática
+## Configuracao
 
-Adicione ao crontab do host ou dentro do container:
+Arquivo: tools/config.py
 
+Principais variaveis:
+- GCS_BUCKET_NAME: Bucket GCS com dados OpenAlex LATAM
+- LOCAL_DOWNLOAD_PATH: Diretorio local para dados (/app/data em Docker)
+- CROSSREF_MAILTO: Email para API Crossref
+- CROSSREF_ROWS_PER_REQUEST: Eventos por requisicao (padrao: 200)
+- CROSSREF_REQUEST_DELAY: Delay entre requests (padrao: 1.0s)
+- CHUNK_SIZE: Linhas por batch (padrao: 50000)
+
+Override via .env ou variaveis de ambiente.
+
+## Troubleshooting
+
+Verificar estrutura de dados:
 ```bash
-# Executar diariamente às 2h
-0 2 * * * docker exec altmetria_api_duckdb python tools/run_data_sync.py
+docker compose -f docker-compose.etl.yml run --rm etl ls -lhR /app/data/events
 ```
 
-### Monitoramento
-
+Verificar symlink:
 ```bash
-# Logs da API
-docker logs -f altmetria_api_duckdb
-
-# Verificar arquivos de dados
-docker exec altmetria_api_duckdb ls -lh /app/data
-
-# Health check
-curl http://localhost:8000/health
+docker compose -f docker-compose.etl.yml run --rm etl ls -l /app/data/crossref_clean_events.parquet
 ```
 
-## Estrutura de Dados
+Logs do processamento:
+```bash
+cat tools/import_biblio.log
+```
 
-O sistema trabalha com arquivos Parquet organizados em:
+Permissoes (se necessario):
+```bash
+sudo chown -R 1000:1000 ./data
+```
 
-- `/data/*.parquet` - Tabelas OpenAlex LATAM (autores, obras, instituições)
-- `/data/events/raw/` - Eventos altmétricos brutos (Crossref, BORI)
-- `/data/events/processed/` - Eventos processados
-- `/data/events/consolidated/` - Eventos consolidados de todas as fontes
+## Ordem de Execucao Recomendada
+
+1. run_data_sync.py - Baixa OpenAlex LATAM
+2. collect_crossref_events.py - Coleta eventos Crossref
+3. process_crossref_events.py - Processa eventos Crossref
+4. process_bori_events.py - Processa eventos BORI (se houver novos dados)
+5. process_all_events.py - Consolida tudo (SEMPRE POR ULTIMO)
+
+A API estara pronta para servir dados assim que os arquivos estiverem em /data.

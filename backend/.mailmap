@@ -1,0 +1,6 @@
+# Git mailmap - unifica autores e oculta colaboradores indesejados
+# Formato: Nome Correto <email@correto.com> Nome Antigo <email@antigo.com>
+
+# Mapeia Claude para o autor real dos commits
+Marcelo Barros <marcelodebarros.jr.1998@gmail.com> Claude <noreply@anthropic.com>
+m4rcck11 <marcelodebarros.jr.1998@gmail.com> Claude <noreply@anthropic.com>
