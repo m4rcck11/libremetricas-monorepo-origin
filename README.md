@@ -12,7 +12,7 @@ API REST de alta performance desenvolvida para fornecer métricas altmétricas d
   - Pydantic 
   - Cachetools (Cache em memória L1)
 
-## 🏗️ Arquitetura
+## Arquitetura
 
 O projeto segue uma arquitetura segregada para garantir estabilidade em ambiente governamental/institucional:
 
