@@ -42,7 +42,7 @@ venv.bak/
 .env
 .env.local
 .env.*.local
-
+.claude
 # Logs
 *.log
 logs/
